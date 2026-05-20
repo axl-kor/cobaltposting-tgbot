@@ -1,0 +1,177 @@
+import re
+from typing import Literal
+
+import cog
+
+
+def _media_kind(content_type: str) -> Literal["photo", "video", "gif", "document"]:
+    if content_type.startswith("video"):
+        return "video"
+    if content_type == "image/gif":
+        return "gif"
+    if content_type.startswith("image"):
+        return "photo"
+    return "document"
+
+
+class Handler(cog.Cog):
+    def __init__(self, bot: cog.Bot):
+        super().__init__(bot)
+        self.rateLimitCache = cog.types.AsyncLRUTTLCache(maxsize=100, ttl=4)
+        self._downloading: set[int] = set()
+
+    @cog.regMessage(cog.F.text)
+    async def downloadTrigger(self, message: cog.Message):
+        users = await self.bot.dbm.readUsers(userId=message.from_user.id)
+        if not users:
+            return await message.reply(
+                cog.sh.escapeHtml(
+                    "Seems like you doesn't have a channel setted up for posting :<\n"
+                    "You can use /setup to set up a channel for posting.\n"
+                    "For direct downloads you can use @coboldbot."
+                )
+            )
+        user = users[0]
+
+        if not re.match(r"(http|https):\/\/", message.text):
+            return await message.reply(
+                "It doesnt seem like a link, i don't know how to download it."
+            )
+
+        user_id = message.from_user.id
+
+        if user_id in self._downloading:
+            return await message.reply(
+                "Already downloading your previous request, please wait."
+            )
+
+        rate_ts = await self.rateLimitCache.get(user_id)
+        if rate_ts is not None:
+            seconds_left = 4 - (cog.sh.nowdtts() - rate_ts)
+            return await message.reply(
+                f"You're being rate limited, try again in {max(1, seconds_left):.0f}s."
+            )
+
+        self._downloading.add(user_id)
+        rmsg = await message.answer("Downloading...")
+
+        try:
+            downloaded = await self.bot.cobalt.download_all_picker(url=message.text)
+
+            meta = cog.parser.parse_url(message.text)
+            if meta.publisher:
+                caption = meta.format(
+                    user.format
+                    if user.format
+                    else '<a href="{post_url}">&gt; {service_lower}/{publisher}</a>'
+                )
+            else:
+                caption = meta.format(
+                    user.format
+                    if user.format
+                    else '<a href="{post_url}">&gt; {service_lower}</a>'
+                )
+
+            sentmsg = None
+            media_group: list = []  # накопленные InputMediaPhoto/Video
+            first_sent = True  # флаг для caption только первому сообщению
+
+            async def _flush_group():
+                nonlocal sentmsg, first_sent
+                if not media_group:
+                    return
+                if first_sent:
+                    media_group[0].caption = caption
+                    media_group[0].parse_mode = "HTML"
+                    first_sent = False
+                sentmsg = await self.bot.send_media_group(
+                    chat_id=user.channelId,
+                    media=list(media_group),
+                )
+                media_group.clear()
+
+            async def _send_single(f, kind: str):
+                nonlocal sentmsg, first_sent
+                cap = caption if first_sent else None
+                pm = "HTML" if first_sent else None
+                first_sent = False
+                buf = cog.aiotypes.BufferedInputFile(f.read(), filename=f.filename)
+                if kind == "gif":
+                    sentmsg = [
+                        await self.bot.send_animation(
+                            chat_id=user.channelId,
+                            animation=buf,
+                            caption=cap,
+                            parse_mode=pm,
+                        )
+                    ]
+                else:
+                    sentmsg = [
+                        await self.bot.send_document(
+                            chat_id=user.channelId,
+                            document=buf,
+                            caption=cap,
+                            parse_mode=pm,
+                        )
+                    ]
+
+            for f in downloaded:
+                kind = _media_kind(f.content_type)
+                buf = cog.aiotypes.BufferedInputFile(f.read(), filename=f.filename)
+
+                if kind in ("photo", "video"):
+                    # Добавляем в группу
+                    if kind == "photo":
+                        media_group.append(cog.aiotypes.InputMediaPhoto(media=buf))
+                    else:
+                        media_group.append(cog.aiotypes.InputMediaVideo(media=buf))
+
+                    # Флашим если достигли лимита
+                    if len(media_group) == 10:
+                        await _flush_group()
+
+                else:
+                    # gif или document — сначала флашим накопленную группу
+                    await _flush_group()
+                    await _send_single(f, kind)
+
+            # Флашим остаток группы
+            await _flush_group()
+
+            channel = await self.bot.get_chat(user.channelId)
+            await rmsg.edit_text(
+                f"Sent to <b>{channel.title}</b>!",
+                parse_mode="HTML",
+                reply_markup=cog.aiotypes.InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            cog.aiotypes.InlineKeyboardButton(
+                                text="View in channel", url=sentmsg[0].get_url()
+                            )
+                        ]
+                    ]
+                ),
+            )
+
+            await self.rateLimitCache.set(user_id, cog.sh.nowdtts())
+
+        except Exception as e:
+            if isinstance(e, cog.cobaltAPI.CobaltAllNodesFailed):
+                await rmsg.edit_text(
+                    "Currently i can't download this content from this service, try again later."
+                )
+                raise e
+
+            await rmsg.edit_text(
+                "An error occurred, already reported to admins. Try again later."
+            )
+            raise e
+
+        finally:
+            self._downloading.discard(user_id)
+
+        user.stats
+
+
+def setup(bot: cog.Bot):
+    Handler(bot=bot).register()
