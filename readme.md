@@ -15,7 +15,9 @@ This bot offers you:
 ```json
 {
     "token": "",
-    "nodes": []
+    "nodes": ["https://..."],
+    "errors_report_chatid": 123,
+    "admins": [123, 456]
 }
 ```
 
