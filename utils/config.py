@@ -1,21 +1,20 @@
-import json
-
 import pytz
 from aiogram.client.default import DefaultBotProperties
+from dotenv import dotenv_values
 
 defaults = DefaultBotProperties(parse_mode="HTML", link_preview_is_disabled=True)
 databasePath = "utils/base.db"
 
 defaultTimezone = pytz.timezone("Europe/Moscow")
 
-jsonconf = json.load(open("config.json"))
+env = dotenv_values()
 
-adminsIds = jsonconf["admins"]
+adminsIds = env["ADMINS_IDS"]
 
 logIgnoreTypes = ["preload"]
 
-nodes = jsonconf["nodes"]
+nodes = env["COBALT_NODES"]
 
 
 class tokens:
-    token = jsonconf["token"]
+    token = env["TELEGRAM_BOT_TOKEN"]

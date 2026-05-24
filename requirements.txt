@@ -1,0 +1,6 @@
+aiogram
+aiosqlite
+dotenv
+colorama
+aiohttp
+datetime
