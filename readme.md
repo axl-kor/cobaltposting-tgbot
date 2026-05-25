@@ -11,14 +11,12 @@ This bot offers you:
 2. You send this bot a link to content
 3. Bot downloads it, applies custom formatting(if you setted it) to the caption, and sends this message to your channel.
 
-**config.json schema**
+**.env schema**
 ```json
-{
-    "token": "",
-    "nodes": ["https://..."],
-    "errors_report_chatid": 123,
-    "admins": [123, 456]
-}
+TELEGRAM_BOT_TOKEN=...
+COBALT_NODES=http://...,http://...
+ERRORS_REPORT_CHATID=...
+ADMINS_IDS=...,...
 ```
 
 *bot is still under construction 20.05.2026*

@@ -4,4 +4,4 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      - ./utils/base.db:/app/utils/base.db
+      - ./utils/base.db:/app/cobaltpostbot/utils/base.db
