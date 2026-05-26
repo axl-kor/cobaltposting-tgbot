@@ -9,11 +9,11 @@ defaultTimezone = pytz.timezone("Europe/Moscow")
 
 env = dotenv_values()
 
-adminsIds = env["ADMINS_IDS"]
+adminsIds = env["ADMINS_IDS"].split(",")
 
 logIgnoreTypes = ["preload"]
 
-nodes = env["COBALT_NODES"]
+nodes = env["COBALT_NODES"].split(",")
 
 
 class tokens:

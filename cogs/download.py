@@ -73,16 +73,27 @@ class Handler(cog.Cog):
                 )
 
             sentmsg = None
-            media_group: list = []  # накопленные InputMediaPhoto/Video
-            first_sent = True  # флаг для caption только первому сообщению
+            media_group: list = []
+            first_sent = True
 
             async def _flush_group():
                 nonlocal sentmsg, first_sent
                 if not media_group:
                     return
                 if first_sent:
-                    media_group[0].caption = caption
-                    media_group[0].parse_mode = "HTML"
+                    first_item = media_group[0]
+                    if isinstance(first_item, cog.aiotypes.InputMediaPhoto):
+                        media_group[0] = cog.aiotypes.InputMediaPhoto(
+                            media=first_item.media,
+                            caption=caption,
+                            parse_mode="HTML",
+                        )
+                    elif isinstance(first_item, cog.aiotypes.InputMediaVideo):
+                        media_group[0] = cog.aiotypes.InputMediaVideo(
+                            media=first_item.media,
+                            caption=caption,
+                            parse_mode="HTML",
+                        )
                     first_sent = False
                 sentmsg = await self.bot.send_media_group(
                     chat_id=user.channelId,
