@@ -14,9 +14,7 @@ class DbQueryReturn:
         self.fetchall: tuple = fetchall
 
 
-class DatabaseMethods:
-    """Класс с методами для работы с базой данных."""
-
+class DatabaseMethodsBase:
     def __init__(self, bot: "service.Bot"):
         self.db: aiosqlite.Connection = bot.db
         self.bot = bot
@@ -25,8 +23,6 @@ class DatabaseMethods:
             "mid": {"maxsize": 1024, "ttl": 900},
             "short": {"maxsize": 1024, "ttl": 300},
         }
-
-        self._cacheUsersStore = AsyncLRUTTLCache(**self.cacheSettings["short"])
 
     async def _clearCache(self):
         for attr_name in dir(self):
@@ -44,7 +40,7 @@ class DatabaseMethods:
             return cached
         return None
 
-    async def _getStored(self, store: AsyncLRUTTLCache = None):
+    async def _getStored(self, store: AsyncLRUTTLCache | None = None):
         caches: dict[str, OrderedDict] = {}
         if not store:
             for attr_name in dir(self):
@@ -151,6 +147,25 @@ class DatabaseMethods:
 		({", ".join(placeholders)})
 		"""
         await self.execute(query, values)
+
+    async def createTable(
+        self,
+        table: str,
+        columns: dict[str, str],
+        ifNotExists: bool = True,
+    ):
+        self.bot.log(
+            f"Start dbm.createTable for {table}",
+            ", ".join([f"{k}: {v}" for k, v in columns.items()]),
+            type="pos",
+        )
+        exists = "IF NOT EXISTS" if ifNotExists else ""
+        cols = [f'"{name}" {definition}' for name, definition in columns.items()]
+        query = f"""
+    CREATE TABLE {exists} {table}
+        ({", ".join(cols)})
+        """
+        await self.execute(query)
 
     def generateWhereClauses(self, filters: list[Filter] | list[FiltersGroup]):
         where_clauses: list[str] = []
@@ -335,108 +350,6 @@ class DatabaseMethods:
         limit: int = -1,
         offset: int = 0,
     ):
-        """
-        Универсальный метод для чтения данных из БД с поддержкой фильтров, JOIN и сортировки.
-
-        Args:
-                        table (str): Имя таблицы
-                        columns (list[str]): Список колонок для выборки
-                        joins (list[Join], optional): Список объектов Join для соединения таблиц.
-                        Каждый Join содержит:
-                        - table: имя присоединяемой таблицы
-                        - alias: псевдоним таблицы (опционально)
-                        - type: тип JOIN (LEFT/INNER/RIGHT, по умолчанию INNER)
-                        - filters: список объектов Filter для условий ON\n
-                        filters (list[Filter], optional): Список объектов Filter для условий WHERE.
-                        Каждый Filter содержит:
-                        - column: имя колонки
-                        - value: значение для сравнения или специальный оператор
-                        orderBy (str, optional): Колонка для сортировки. Defaults to None.
-                        orderDir (str, optional): Направление сортировки (ASC/DESC). Defaults to "DESC".
-                        limit (int, optional): Ограничение количества записей. Defaults to -1 (без ограничений).
-                        offset (int, optional): Смещение от начала выборки. Defaults to 0.
-
-        Returns:
-                        DbQueryReturn: Объект с результатами запроса (fetchone/fetchall)
-
-        Examples:
-                        - Простой запрос
-                        ```
-                        users = await dbm.read(
-                                        table="users",
-                                        columns=["tgId", "userName"]
-                        )```
-
-                        - С фильтрами
-                        ```
-                        user = await dbm.read(
-                                        table="users",
-                                        columns=["*"],
-                                        filters=[Filter("tgId", 123456)]
-                        )```
-
-                        - С IS NOT NULL
-                        ```
-                        active_users = await dbm.read(
-                                        table="users",
-                                        columns=["tgId", "userName"],
-                                        filters=[Filter("tariffId", {"op": "IS NOT", "val": "NULL"})]
-                        )```
-
-                        - С JOIN
-                        ```
-                        keys = await dbm.read(
-                                        table="keys k",
-                                        columns=[
-                                                        "k.keyId",
-                                                        "k.keyName",
-                                                        "u.tgId as ownerId"
-                                        ],
-                                        joins=[
-                                                        Join(
-                                                                        table="users",
-                                                                        alias="u",
-                                                                        filters=[Filter("u.userId", "k.ownerId")]
-                                                        )
-                                        ],
-                                        filters=[Filter("k.keyId", 123)]
-                        )```
-
-                        - Сложный запрос с множественными JOIN
-                        ```
-                        result = await dbm.read(
-                                        table="keys k",
-                                        columns=[
-                                                        "k.keyId",
-                                                        "u.tgId",
-                                                        "p.protocolName",
-                                                        "s.serverName"
-                                        ],
-                                        joins=[
-                                                        Join(
-                                                                        table="users",
-                                                                        alias="u",
-                                                                        filters=[Filter("u.userId", "k.ownerId")]
-                                                        ),
-                                                        Join(
-                                                                        table="protocols",
-                                                                        alias="p",
-                                                                        type="LEFT JOIN",
-                                                                        filters=[Filter("p.protocolId", "k.protocolId")]
-                                                        ),
-                                                        Join(
-                                                                        table="servers",
-                                                                        alias="s",
-                                                                        filters=[Filter("s.serverId", "k.serverId")]
-                                                        )
-                                        ],
-                                        filters=[Filter("u.tgId", 123456)],
-                                        orderBy="k.createdAt",
-                                        orderDir="DESC",
-                                        limit=10
-                        )```
-        """
-
         _joingen = self.generateJoinClauses(joins)
         join_clauses = _joingen[0]
         params = [*_joingen[1]]
@@ -543,6 +456,12 @@ WHERE {" AND ".join(where_clauses)}
             await store.set(key, value)
         except Exception:
             pass
+
+
+class DatabaseMethods(DatabaseMethodsBase):
+    def __init__(self, bot: "service.Bot"):
+        super().__init__(bot)
+        self._cacheUsersStore = AsyncLRUTTLCache(**self.cacheSettings["short"])
 
     async def createUser(self, userId: int, channelId: int, createdAt: int):
         await self.create(

@@ -42,6 +42,14 @@ class Bot(aiBot):
         self.dbm: databaseMethods.DatabaseMethods = databaseMethods.DatabaseMethods(
             self
         )
+        await self.dbm.createTable(
+            "users",
+            {
+                "id": "INTEGER PRIMARY KEY",
+                "channel_id": "INTEGER",
+                "created_at": "INTEGER",
+            },
+        )
         return self.db
 
     def load_cog(self, module_name: str):
