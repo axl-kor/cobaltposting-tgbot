@@ -45,9 +45,11 @@ class Bot(aiBot):
         await self.dbm.createTable(
             "users",
             {
-                "id": "INTEGER PRIMARY KEY",
-                "channel_id": "INTEGER",
-                "created_at": "INTEGER",
+                "userId": "INTEGER NOT NULL PRIMARY KEY",
+                "channelId": "INTEGER NOT NULL",
+                "stats": "TEXT",
+                "createdAt": "INTEGER NOT NULL",
+                "format": "TEXT",
             },
         )
         return self.db
