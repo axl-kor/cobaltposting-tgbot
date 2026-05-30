@@ -137,7 +137,8 @@ def regAdmin(func: Callable) -> Callable:
         if not user:
             return
 
-        if user.id in cog_self.bot.config.adminsIds:
+        admin_ids = [int(x) for x in cog_self.bot.config.adminsIds if x.strip().isdigit()]
+        if user.id in admin_ids:
             return await func(*args, **kwargs)
 
         # try:

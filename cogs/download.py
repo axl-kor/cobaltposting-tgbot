@@ -33,6 +33,35 @@ class Handler(cog.Cog):
             )
         user = users[0]
 
+        # Проверяем что бот до сих пор админ
+        try:
+            bot_member = await self.bot.get_chat_member(user.channelId, self.bot.id)
+            if bot_member.status != "administrator":
+                return await message.reply(
+                    "⚠️ I'm no longer an administrator in your linked channel.\n"
+                    "Please add me as admin and try again."
+                )
+        except Exception:
+            return await message.reply(
+                "⚠️ Could not access your linked channel.\n"
+                "I might have been removed. Use /setup to link a new channel."
+            )
+
+        # Проверяем что юзер до сих пор админ
+        try:
+            user_member = await self.bot.get_chat_member(
+                user.channelId, message.from_user.id
+            )
+            if user_member.status not in ("administrator", "creator"):
+                return await message.reply(
+                    "⚠️ You are no longer an administrator of the linked channel.\n"
+                    "Posting is disabled. Contact the channel owner to restore your rights."
+                )
+        except Exception:
+            return await message.reply(
+                "⚠️ Could not verify your role in the linked channel."
+            )
+
         if not re.match(r"(http|https):\/\/", message.text):
             return await message.reply(
                 "It doesnt seem like a link, i don't know how to download it."
