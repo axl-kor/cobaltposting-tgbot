@@ -47,6 +47,21 @@ class Handler(cog.Cog):
             )
             return
 
+        # Проверяем что юзер или админ или овнер канала
+        try:
+            user_member = await self.bot.get_chat_member(chat.id, message.from_user.id)
+            if user_member.status not in ("administrator", "creator"):
+                await message.answer(
+                    "⚠️ You are not an administrator of that channel.\n"
+                    "Only channel admins can link it for posting."
+                )
+                return
+        except Exception:
+            await message.answer(
+                "⚠️ Could not verify your role in that channel."
+            )
+            return
+
         # Сохраняем
         user = await self.bot.dbm.readUsers(userId=message.from_user.id)
         if not user:
